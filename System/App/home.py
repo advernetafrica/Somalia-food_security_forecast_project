@@ -50,14 +50,16 @@ def show_home_page(df):
     )
 
     # Display metrics summary
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
+        display_metric("Comodities", 4, "📦")
+    with col2:
         display_metric("Regions Covered", df["adm1_name"].nunique(), "🗺️")
 
-    with col2:
+    with col3:
         display_metric("Markets Monitored", df["mkt_name"].nunique(), "🏪")
 
-    with col3:
+    with col4:
         display_metric(
             "Avg Food Price Index", f"{df['food_price_index'].mean():.2f}", "📈"
         )

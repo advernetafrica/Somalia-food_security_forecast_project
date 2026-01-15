@@ -14,33 +14,34 @@ def render_map(df):
     # Create a layout with map on the left and checkboxes on the right
     col1, col2 = st.columns([0.8, 0.2])
 
-    # Get unique regions
-    unique_regions = sorted(df["adm2_name"].unique())
+    # Get unique commodities
+    unique_commodities = [
+        "food_price_index",
+        "market_price_sorghum",
+        "market_price_oil",
+        "market_price_rice",
+        "market_price_maize",
+    ]
 
-    # In the right column, create vertical checkboxes for regions
+    # In the right column, create radio buttons for commodities
     with col2:
-        st.write("**Filter by District:**")
+        st.write("**Select Commodity:**")
 
-        # Create a dictionary to hold checkbox states
-        selected_regions = {}
-        for region in unique_regions:
-            selected_regions[region] = st.checkbox(
-                region, value=True, key=f"map_region_{region}"
-            )
+        selected_commodity = st.radio(
+            "Choose:",
+            options=unique_commodities,
+            index=0,
+            key="commodity_radio",
+        )
 
-        # Get list of selected regions
-        regions_to_show = [r for r, selected in selected_regions.items() if selected]
+        # Get list of selected commodities (single)
+        commodities_to_show = [selected_commodity]
 
-        # Show selection summary
-        if len(regions_to_show) == len(unique_regions):
-            st.info("Showing all districts")
-        else:
-            st.info(
-                f"Showing {len(regions_to_show)} of {len(unique_regions)} districts"
-            )
+        # Show selection
+        st.info(f"Selected commodity: {selected_commodity}")
 
-    # Filter data based on selected regions
-    filtered_df = df[df["adm2_name"].isin(regions_to_show)]
+    # No filter on df
+    filtered_df = df
 
     # In the left column, render the map
     with col1:
@@ -50,14 +51,19 @@ def render_map(df):
                 somalia_geo = json.load(f)
 
             # Aggregate data by district
-            data = (
-                filtered_df.groupby("adm2_name")["food_price_index"]
-                .mean()
-                .reset_index()
-            )
+            if commodities_to_show:
+                data = (
+                    filtered_df.groupby("adm2_name")[commodities_to_show]
+                    .mean()
+                    .mean(axis=1)
+                    .reset_index()
+                    .rename(columns={0: "avg_price"})
+                )
+            else:
+                data = pd.DataFrame({"adm2_name": [], "avg_price": []})
             data["region"] = data["adm2_name"].str.upper()
 
-            value_dict = dict(zip(data["region"], data["food_price_index"]))
+            value_dict = dict(zip(data["region"], data["avg_price"]))
 
             # Add the value data to each feature in the GeoJSON
             for feature in somalia_geo["features"]:
@@ -72,8 +78,8 @@ def render_map(df):
                 # Format the value
                 feature["properties"]["FORMATTED_INDEX"] = f"{value:.2f}"
 
-            min_value = data["food_price_index"].min() if not data.empty else 0
-            max_value = data["food_price_index"].max() if not data.empty else 1
+            min_value = data["avg_price"].min() if not data.empty else 0
+            max_value = data["avg_price"].max() if not data.empty else 1
 
             # Create the base map with explicit tile provider
             m = folium.Map(
@@ -109,7 +115,7 @@ def render_map(df):
             # Add GeoJSON layer with enhanced tooltip
             tooltip = folium.GeoJsonTooltip(
                 fields=["adm2_name", "FORMATTED_INDEX"],
-                aliases=["District:", "Avg Food Price Index:"],
+                aliases=["District:", "Avg Selected Commodity Price:"],
                 localize=True,
                 sticky=True,
                 style=(
@@ -122,19 +128,19 @@ def render_map(df):
                 style_function=style_function,
                 highlight_function=highlight_function,
                 tooltip=tooltip,
-                name="Somalia Districts",
+                name="Somalia Regions",
             ).add_to(m)
 
             # Add color scale
-            color_scale.caption = "Average Food Price Index"
+            color_scale.caption = "Average Selected Commodity Price"
             m.add_child(color_scale)
 
             # Get the average index for display
-            avg_index = filtered_df["food_price_index"].mean()
+            avg_index = data["avg_price"].mean() if not data.empty else 0
 
             # Display average index
             st.markdown(
-                f"**Average Food Price Index Across Selected Districts: {avg_index:.2f}**"
+                f"**Average Across All Districts: {avg_index:.2f}**"
             )
 
             # Get the HTML representation of the map
