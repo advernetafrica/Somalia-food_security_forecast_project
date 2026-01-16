@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import joblib
 import requests
@@ -54,59 +55,20 @@ def show_predictions_page(df):
     col1, content_col, col2 = st.columns([0.05, 0.9, 0.05])
 
     with content_col:
-        # URL of the model on GitHub (placeholder for Somalia Food Security model)
-        model_url = (
-            "https://github.com/user/repo/raw/main/Models/food_security_model.pkl"
-        )
-        encoder_url = "https://github.com/user/repo/raw/main/Models/encoder.pkl"
+        # Load the model locally
+        import pickle
 
-        # Download the model and encoder files
-        model_path = download_file(model_url, "best_gb_model.pkl")
-        encoder_path = download_file(encoder_url, "encoder.pkl")
-
-        if not model_path or not encoder_path:
-            return  # If downloading fails, exit early
-
-        # Load the model using joblib
-        model = joblib.load(model_path)
-        encoder = joblib.load(encoder_path)
-
-        # Get valid categorical values from the encoder
-        valid_counties = encoder.categories_[0]
-
-        # Row 1: Location dropdowns
-        loc_col1, loc_col2, loc_col3 = st.columns(3)
-        with loc_col1:
-            county = st.selectbox("County", options=valid_counties)
-
-        # Filter subcounties based on selected county
-        county_df = df[df["county_name"] == county]
-        valid_subcounties = sorted(county_df["sub_county_name"].unique())
-
-        with loc_col2:
-            sub_county = st.selectbox("Sub-County", options=valid_subcounties)
-
-        # Filter wards based on selected subcounty
-        subcounty_df = county_df[county_df["sub_county_name"] == sub_county]
-        valid_wards = sorted(subcounty_df["ward_name"].unique())
-
-        with loc_col3:
-            ward = st.selectbox("Ward", options=valid_wards)
-
-        # Filter facilities based on selected ward
-        ward_df = subcounty_df[subcounty_df["ward_name"] == ward]
-        valid_facilities = sorted(ward_df["facility_name"].unique())
-
-        fac_col1, fac_col2 = st.columns(2)
-        with fac_col1:
-            facility = st.selectbox("Facility", options=valid_facilities)
-
-        # Get valid commodities for the selected facility
-        facility_df = ward_df[ward_df["facility_name"] == facility]
-        valid_commodities = sorted(facility_df["dataelement_name"].unique())
-
-        with fac_col2:
-            commodity = st.selectbox("Commodity", options=valid_commodities)
+        try:
+            model = pickle.load(open("../Models/best_gb_model.pkl", "rb"))
+            feature_names = pickle.load(open("../Models/feature_names.pkl", "rb"))
+            scaler = pickle.load(open("../Models/scaler.pkl", "rb"))
+            lambda_boxcox = pickle.load(open("../Models/lambda_boxcox.pkl", "rb"))
+            # encoder = pickle.load(open("../Models/encoder.pkl", 'rb'))
+        except FileNotFoundError:
+            st.error(
+                "Model files not found. Please ensure the models are saved in ../Models/"
+            )
+            return
 
         # Row 2: Temporal features
         st.markdown(
@@ -134,138 +96,167 @@ def show_predictions_page(df):
                 unsafe_allow_html=True,
             )
 
-        # Calculate time series features dynamically if historical data exists
-        facility_commodity_df = df[
-            (df["county_name"] == county)
-            & (df["sub_county_name"] == sub_county)
-            & (df["ward_name"] == ward)
-            & (df["facility_name"] == facility)
-            & (df["dataelement_name"] == commodity)
-        ].sort_values("period")
-
-        # Initialize lag values
-        lag_1_value = 0
-        lag_3_value = 0
-        rolling_mean_3_value = 0
-
-        # Calculate lag features if we have historical data
-        if not facility_commodity_df.empty:
-            # Get the most recent values for dynamic calculation
-            recent_values = facility_commodity_df["value"].tail(12).tolist()
-
-            # Calculate lag features from historical data if available
-            if len(recent_values) >= 1:
-                lag_1_value = recent_values[-1]
-
-            if len(recent_values) >= 3:
-                lag_3_value = recent_values[-3]
-
-            if len(recent_values) >= 3:
-                rolling_mean_3_value = sum(recent_values[-3:]) / 3
-
         st.markdown(
             """
-        <div style="background-color: #f1f8e9; padding: 2px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #4CAF50;">
-            <h4 style="color: #2c3e50; margin-top: 0;">Time Series Features</h4>
+        <div style="background-color: #e3f2fd; padding: 2px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #2196F3;">
+            <h4 style="color: #2c3e50; margin-top: 0;"> Features</h4>
         </div>
         """,
             unsafe_allow_html=True,
         )
 
-        lag_col1, lag_col2, lag_col3 = st.columns(3)
-        with lag_col1:
-            lag_1 = st.number_input(
-                "Lag 1 (previous month)", min_value=0.0, value=float(lag_1_value)
-            )
-        with lag_col2:
-            lag_3 = st.number_input(
-                "Lag 3 (three months ago)", min_value=0.0, value=float(lag_3_value)
-            )
-        with lag_col3:
-            rolling_mean_3 = st.number_input(
-                "Rolling Mean (last 3 months)",
+        # Compute historical medians for exogenous variables
+        historical_medians = {}
+
+        cols = [
+            "market_price_maize",
+            "market_price_rice",
+            "market_price_sorghum",
+            "market_price_oil",
+            "population",
+            "exchange_rate_typical",
+            "food_price_critical",
+            "cpi_communication",
+            "cpi_housing_utilities",
+            "food_price_index_rolling_mean_3",
+        ]
+
+        for col in cols:
+            if col in df.columns and df[col].notna().any():
+                historical_medians[col] = float(df[col].median())
+            else:
+                historical_medians[col] = 0.0  # safe fallback
+
+        # Exogenous features inputs
+        exo_col1, exo_col2 = st.columns(2)
+
+        with exo_col1:
+            market_price_maize = st.number_input(
+                "Market Price Maize",
                 min_value=0.0,
-                value=float(rolling_mean_3_value),
+                value=historical_medians["market_price_maize"],
+            )
+            market_price_rice = st.number_input(
+                "Market Price Rice",
+                min_value=0.0,
+                value=historical_medians["market_price_rice"],
+            )
+            market_price_sorghum = st.number_input(
+                "Market Price Sorghum",
+                min_value=0.0,
+                value=historical_medians["market_price_sorghum"],
+            )
+            market_price_oil = st.number_input(
+                "Market Price Oil",
+                min_value=0.0,
+                value=historical_medians["market_price_oil"],
+            )
+            population = st.number_input(
+                "Population",
+                min_value=0.0,
+                value=historical_medians["population"],
             )
 
-        # Add a visual indicator to show the auto-calculated values
-        if not facility_commodity_df.empty:
-            st.markdown(
-                """
-            <div style="background-color: #e3f2fd; padding: 2px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196F3;">
-                <p style="margin: 0;"><span style="font-size: 20px;"> </span> Time series features have been auto-calculated based on historical data. You can adjust them if needed.</p>
-            </div>
-            """,
-                unsafe_allow_html=True,
+        with exo_col2:
+            exchange_rate_typical = st.number_input(
+                "Exchange Rate Typical",
+                min_value=0.0,
+                value=historical_medians["exchange_rate_typical"],
             )
-        else:
-            st.markdown(
-                """
-            <div style="background-color: #fff3e0; padding: 2px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #FF9800;">
-                <p style="margin: 0;"><span style="font-size: 20px;">⚠️</span> No historical data found for this selection. Please enter lag values manually.</p>
-            </div>
-            """,
-                unsafe_allow_html=True,
+            food_price_critical = st.number_input(
+                "Food Price Critical",
+                min_value=0.0,
+                value=historical_medians["food_price_critical"],
+            )
+            cpi_communication = st.number_input(
+                "CPI Communication",
+                min_value=0.0,
+                value=historical_medians["cpi_communication"],
+            )
+            cpi_housing_utilities = st.number_input(
+                "CPI Housing Utilities",
+                min_value=0.0,
+                value=historical_medians["cpi_housing_utilities"],
+            )
+            food_price_index_rolling_mean_3 = st.number_input(
+                "Food Price Index Rolling Mean 3",
+                min_value=0.0,
+                value=historical_medians["food_price_index_rolling_mean_3"],
             )
 
         # Create input data for prediction
         input_data = pd.DataFrame(
             [
                 {
-                    "county_name": county,
-                    "sub_county_name": sub_county,
-                    "ward_name": ward,
-                    "facility_name": facility,
-                    "dataelement_name": commodity,
                     "month": month,
                     "year": year,
                     "quarter": quarter,
-                    "lag_1": lag_1,
-                    "lag_3": lag_3,
-                    "rolling_mean_3": rolling_mean_3,
+                    "market_price_maize": market_price_maize,
+                    "market_price_rice": market_price_rice,
+                    "market_price_sorghum": market_price_sorghum,
+                    "market_price_oil": market_price_oil,
+                    "population": population,
+                    "exchange_rate_typical": exchange_rate_typical,
+                    "food_price_critical": food_price_critical,
+                    "cpi_communication": cpi_communication,
+                    "cpi_housing_utilities": cpi_housing_utilities,
+                    "food_price_index_rolling_mean_3": food_price_index_rolling_mean_3,
                 }
             ]
         )
-
-        # Transform categorical features
-        cat_cols = [
-            "county_name",
-            "sub_county_name",
-            "ward_name",
-            "facility_name",
-            "dataelement_name",
-        ]
-        input_data[cat_cols] = encoder.transform(input_data[cat_cols])
-        features = [
-            "month",
-            "year",
-            "quarter",
-            "lag_1",
-            "lag_3",
-            "rolling_mean_3",
-        ] + cat_cols
 
         st.markdown("</div>", unsafe_allow_html=True)  # Close the card container
 
         # Show prediction on button click
         predict_button = st.button("Predict", use_container_width=True)
 
+        def inverse_boxcox(y, lambda_val):
+            if lambda_val == 0:
+                return np.exp(y)
+            return np.power(lambda_val * y + 1, 1 / lambda_val)
+
         if predict_button:
-            prediction = model.predict(input_data[features])[0]
+            X = pd.DataFrame(columns=scaler.feature_names_in_)
+            X.loc[0] = np.nan  # initialize all features
+
+            # 2. Fill values coming from UI
+            for col in input_data.columns:
+                if col in X.columns:
+                    X.loc[0, col] = input_data.loc[0, col]
+
+            # 3. Fill remaining features (climate, conflict, etc.) from historical medians
+            for col in X.columns:
+                if pd.isna(X.loc[0, col]):
+                    if col in df.columns and df[col].notna().any():
+                        X.loc[0, col] = df[col].median()
+                    else:
+                        raise ValueError(f"Missing required feature: {col}")
+
+
+            # 4. Scale all features
+            X_scaled = scaler.transform(X)
+
+            # 5. Select the features used by the model
+            X_scaled_df = pd.DataFrame(X_scaled, columns=scaler.feature_names_in_)
+            X_selected = X_scaled_df[feature_names]
+
+            # 6. Predict
+            raw_prediction = model.predict(X_selected)[0]
+            prediction = inverse_boxcox(raw_prediction, lambda_boxcox)
 
             st.markdown(
                 f"""
             <div style="background-color: #e8f5e9; padding: 2px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin: 5px 0; text-align: center; border-left: 4px solid #4CAF50;">
                 <span style="font-size: 24px;"> </span>
-                <h2 style="margin: 10px 0; color: #2c3e50;">Predicted Demand</h2>
-                <p style="font-size: 32px; font-weight: bold; color: #4CAF50; margin: 10px 0;">{prediction:.2f} units</p>
+                <h2 style="margin: 10px 0; color: #2c3e50;">Predicted Food Price Index</h2>
+                <p style="font-size: 32px; font-weight: bold; color: #4CAF50; margin: 10px 0;">{prediction:.2f} </p>
             </div>
             """,
                 unsafe_allow_html=True,
             )
 
             # Show visualization of recent history and prediction
-            if not facility_commodity_df.empty:
+            if not df.empty:
                 st.markdown(
                     """
                 <div style="background-color: white; padding: 2px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: 5px;">
@@ -275,14 +266,14 @@ def show_predictions_page(df):
                 )
 
                 # Create a combined visualization
-                recent_df = facility_commodity_df.tail(12).copy()
+                recent_df = df.tail(12).copy()
 
                 # Create a prediction point
                 prediction_date = pd.to_datetime(f"{year}-{month:02d}-01")
                 prediction_df = pd.DataFrame(
                     {
-                        "period": [prediction_date],
-                        "value": [prediction],
+                        "Date": [prediction_date],
+                        "food_price_index": [prediction],
                         "type": ["Prediction"],
                     }
                 )
@@ -292,24 +283,24 @@ def show_predictions_page(df):
 
                 # Combine data for visualization
                 plot_df = pd.concat(
-                    [recent_df[["period", "value", "type"]], prediction_df]
+                    [recent_df[["Date", "food_price_index", "type"]], prediction_df]
                 )
 
                 # Create plot
                 fig = px.line(
                     plot_df,
-                    x="period",
-                    y="value",
+                    x="Date",
+                    y="food_price_index",
                     color="type",
                     markers=True,
-                    title=f"Historical Data and Prediction for {commodity}",
-                    labels={"value": "Dispensed Units", "period": "Period"},
+                    title="Historical Food Price Index and Prediction",
+                    labels={"food_price_index": "Food Price Index", "Date": "Date"},
                 )
 
                 # Customize the plot
                 fig.update_layout(
-                    xaxis_title="Time Period",
-                    yaxis_title="Dispensed Units",
+                    xaxis_title="Date",
+                    yaxis_title="Food Price Index",
                     legend_title="Data Type",
                     plot_bgcolor="rgba(255,255,255,0.9)",
                     paper_bgcolor="rgba(255,255,255,0)",

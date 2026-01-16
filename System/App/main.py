@@ -85,10 +85,6 @@ def load_data():
     # Drop 'Unnamed: 0' column if it exists
     if "Unnamed: 0" in df.columns:
         df = df.drop("Unnamed: 0", axis=1)
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df["year"] = df["Date"].dt.year
-    df["month"] = df["Date"].dt.month
-    df["quarter"] = df["Date"].dt.to_period("Q").astype(str)
     return df
 
 

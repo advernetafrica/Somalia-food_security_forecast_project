@@ -45,23 +45,30 @@ def show_visualizations_page(df):
         tab1, tab2, tab3 = st.tabs(["Region", "District", "Market"])
 
         with tab1:
-            selected_region = st.selectbox("Select Region", df["adm1_name"].unique())
+            region_options = ["All Regions"] + list(df["adm1_name"].unique())
+            selected_region = st.selectbox("Select Region", region_options)
 
-        filtered_df = df[df["adm1_name"] == selected_region]
+        # Filter by region only if a specific region is selected
+        if selected_region != "All Regions":
+            filtered_df = df[df["adm1_name"] == selected_region]
+        else:
+            filtered_df = df.copy()  # Use all regions
 
+        # --- District selection ---
         with tab2:
-            selected_district = st.selectbox(
-                "Select District", filtered_df["adm2_name"].unique()
-            )
+            district_options = ["All Districts"] + list(filtered_df["adm2_name"].unique())
+            selected_district = st.selectbox("Select District", district_options)
 
-        filtered_df = filtered_df[filtered_df["adm2_name"] == selected_district]
+        if selected_district != "All Districts":
+            filtered_df = filtered_df[filtered_df["adm2_name"] == selected_district]
 
+        # --- Market selection ---
         with tab3:
-            selected_market = st.selectbox(
-                "Select Market", filtered_df["mkt_name"].unique()
-            )
+            market_options = ["All Markets"] + list(filtered_df["mkt_name"].unique())
+            selected_market = st.selectbox("Select Market", market_options)
 
-        filtered_df = filtered_df[filtered_df["mkt_name"] == selected_market]
+        if selected_market != "All Markets":
+            filtered_df = filtered_df[filtered_df["mkt_name"] == selected_market]
 
         st.markdown("</div>", unsafe_allow_html=True)  # Close the card container
 
@@ -75,15 +82,13 @@ def show_visualizations_page(df):
         )
 
         # Visualizing Food Price Index Over Time
-        time_series = (
-            filtered_df.groupby("Date")["food_price_index"].mean().reset_index()
-        )
+        time_series = filtered_df.groupby("Date")["food_price_index"].mean().reset_index()
         fig = px.line(
             time_series,
             x="Date",
             y="food_price_index",
             markers=True,
-            title=f"Food Price Index Over Time ({selected_market})",
+            title=f"Food Price Index Over Time ({selected_region})",
             labels={"food_price_index": "Food Price Index", "Date": "Date"},
         )
 
@@ -139,7 +144,7 @@ def show_visualizations_page(df):
                 ):
                     selected_prices.append(price_col)
 
-        # Market Price Trend Visualization
+                # Market Price Trend Visualization
         if selected_prices:
             st.markdown(
                 """
@@ -161,17 +166,20 @@ def show_visualizations_page(df):
                 melted_df["Commodity"].str.replace("market_price_", "").str.title()
             )
 
+            # Compute median per Date and Commodity
+            median_df = (
+                melted_df.groupby(["Date", "Commodity"])["Price"]
+                .median()
+                .reset_index()
+            )
+
             fig = px.line(
-                melted_df,
+                median_df,
                 x="Date",
                 y="Price",
                 color="Commodity",
                 markers=True,
-                labels={
-                    "Price": "Market Price",
-                    "Date": "Date",
-                    "Commodity": "Commodity",
-                },
+                labels={"Price": "Market Price", "Date": "Date", "Commodity": "Commodity"},
             )
 
             # Enhance chart styling
@@ -194,17 +202,9 @@ def show_visualizations_page(df):
             # Enhance line style
             fig.update_traces(line=dict(width=2.5), marker=dict(size=6))
 
-            # Make plotly chart use the full width
+            # Display chart
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.markdown(
-                """
-            <div style="background-color: #fff3e0; padding: 2px; border-radius: 8px; margin: 5px 0; border-left: 4px solid #FF9800; text-align: center;">
-                <p style="margin: 0;"><span style="font-size: 20px;">⚠️</span> Please select at least one market price to see trends.</p>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
+
 
         # Optional raw data display
         show_data = st.checkbox("Show Raw Data", value=False)

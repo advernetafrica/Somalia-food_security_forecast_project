@@ -14,31 +14,33 @@ def render_map(df):
     # Create a layout with map on the left and checkboxes on the right
     col1, col2 = st.columns([0.8, 0.2])
 
-    # Get unique commodities
-    unique_commodities = [
-        "food_price_index",
-        "market_price_sorghum",
-        "market_price_oil",
-        "market_price_rice",
-        "market_price_maize",
-    ]
+    # Mapping of user-friendly names to feature names
+    commodity_options = {
+        "Food Price Index": "food_price_index",
+        "Sorghum Price": "market_price_sorghum",
+        "Cooking Oil Price": "market_price_oil",
+        "Rice Price": "market_price_rice",
+        "Maize Price": "market_price_maize",
+    }
 
     # In the right column, create radio buttons for commodities
     with col2:
         st.write("**Select Commodity:**")
 
-        selected_commodity = st.radio(
+        # Show user-friendly names in the radio
+        selected_label = st.radio(
             "Choose:",
-            options=unique_commodities,
+            options=list(commodity_options.keys()),
             index=0,
             key="commodity_radio",
         )
 
+        # Map back to the actual feature name for slicing
+        selected_commodity = commodity_options[selected_label]
+
         # Get list of selected commodities (single)
         commodities_to_show = [selected_commodity]
 
-        # Show selection
-        st.info(f"Selected commodity: {selected_commodity}")
 
     # No filter on df
     filtered_df = df
@@ -132,7 +134,7 @@ def render_map(df):
             ).add_to(m)
 
             # Add color scale
-            color_scale.caption = "Average Selected Commodity Price"
+            color_scale.caption = "Average Food Price Index"
             m.add_child(color_scale)
 
             # Get the average index for display
