@@ -6,6 +6,7 @@ import joblib
 import requests
 from io import BytesIO
 import pickle
+from inference import recursive_forecast_gb, SELECTED_FEATURES
 
 
 def download_file(url, filename):
@@ -55,20 +56,25 @@ def show_predictions_page(df):
     col1, content_col, col2 = st.columns([0.05, 0.9, 0.05])
 
     with content_col:
-        # Load the model locally
-        import pickle
+        st.markdown(
+            """
+        <div style="background-color: #f1f8e9; padding: 2px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #4CAF50;">
+            <h4 style="color: #2c3e50; margin-top: 0;">Region</h4>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
 
-        try:
-            model = pickle.load(open("../Models/best_gb_model.pkl", "rb"))
-            feature_names = pickle.load(open("../Models/feature_names.pkl", "rb"))
-            scaler = pickle.load(open("../Models/scaler.pkl", "rb"))
-            lambda_boxcox = pickle.load(open("../Models/lambda_boxcox.pkl", "rb"))
-            # encoder = pickle.load(open("../Models/encoder.pkl", 'rb'))
-        except FileNotFoundError:
-            st.error(
-                "Model files not found. Please ensure the models are saved in ../Models/"
-            )
-            return
+        # Select region and district
+        df.rename(columns={'adm1_name': 'region', 'mkt_name': 'district'}, inplace=True)
+        df.drop(columns=['adm2_name'], inplace=True)
+
+        reg_col1, reg_col2 = st.columns(2)
+        with reg_col1:
+            region = st.selectbox("Region", df["region"].unique())
+        with reg_col2:
+            district = st.selectbox("District", df[df["region"] == region]["district"].unique())
+
 
         # Row 2: Temporal features
         st.markdown(
@@ -84,7 +90,7 @@ def show_predictions_page(df):
         with time_col1:
             month = st.number_input("Month", min_value=1, max_value=12, value=4)
         with time_col2:
-            year = st.number_input("Year", min_value=2011, max_value=2030, value=2024)
+            year = st.number_input("Year", min_value=2011, max_value=2030, value=2025)
         with time_col3:
             quarter = (month - 1) // 3 + 1
             st.markdown(
@@ -105,10 +111,9 @@ def show_predictions_page(df):
             unsafe_allow_html=True,
         )
 
-        # Compute historical medians for exogenous variables
-        historical_medians = {}
-
         cols = [
+            "region",
+            "district",
             "market_price_maize",
             "market_price_rice",
             "market_price_sorghum",
@@ -121,76 +126,106 @@ def show_predictions_page(df):
             "food_price_index_rolling_mean_3",
         ]
 
-        for col in cols:
-            if col in df.columns and df[col].notna().any():
-                historical_medians[col] = float(df[col].median())
-            else:
-                historical_medians[col] = 0.0  # safe fallback
+        historical_values = {}
 
-        # Exogenous features inputs
+        for col in cols:
+            if col not in df.columns or not df[col].notna().any():
+                historical_values[col] = 0.0
+                continue
+
+            if pd.api.types.is_numeric_dtype(df[col]):
+                historical_values[col] = float(df[col].median())
+
+            else:
+                historical_values[col] = df[col].mode().iloc[0]
+
         exo_col1, exo_col2 = st.columns(2)
 
         with exo_col1:
             market_price_maize = st.number_input(
                 "Market Price Maize",
                 min_value=0.0,
-                value=historical_medians["market_price_maize"],
+                value=historical_values["market_price_maize"],
             )
             market_price_rice = st.number_input(
                 "Market Price Rice",
                 min_value=0.0,
-                value=historical_medians["market_price_rice"],
+                value=historical_values["market_price_rice"],
             )
             market_price_sorghum = st.number_input(
                 "Market Price Sorghum",
                 min_value=0.0,
-                value=historical_medians["market_price_sorghum"],
+                value=historical_values["market_price_sorghum"],
             )
             market_price_oil = st.number_input(
                 "Market Price Oil",
                 min_value=0.0,
-                value=historical_medians["market_price_oil"],
+                value=historical_values["market_price_oil"],
             )
             population = st.number_input(
                 "Population",
                 min_value=0.0,
-                value=historical_medians["population"],
+                value=historical_values["population"],
             )
 
         with exo_col2:
             exchange_rate_typical = st.number_input(
                 "Exchange Rate Typical",
                 min_value=0.0,
-                value=historical_medians["exchange_rate_typical"],
+                value=historical_values["exchange_rate_typical"],
             )
             food_price_critical = st.number_input(
                 "Food Price Critical",
                 min_value=0.0,
-                value=historical_medians["food_price_critical"],
+                value=historical_values["food_price_critical"],
             )
             cpi_communication = st.number_input(
                 "CPI Communication",
                 min_value=0.0,
-                value=historical_medians["cpi_communication"],
+                value=historical_values["cpi_communication"],
             )
             cpi_housing_utilities = st.number_input(
                 "CPI Housing Utilities",
                 min_value=0.0,
-                value=historical_medians["cpi_housing_utilities"],
-            )
-            food_price_index_rolling_mean_3 = st.number_input(
-                "Food Price Index Rolling Mean 3",
-                min_value=0.0,
-                value=historical_medians["food_price_index_rolling_mean_3"],
+                value=historical_values["cpi_housing_utilities"],
             )
 
-        # Create input data for prediction
-        input_data = pd.DataFrame(
-            [
-                {
-                    "month": month,
-                    "year": year,
-                    "quarter": quarter,
+        st.markdown("</div>", unsafe_allow_html=True)  # Close the card container
+
+        # Show prediction on button click
+        predict_button = st.button("Predict", use_container_width=True)
+
+        if predict_button:
+            df["Date"] = pd.to_datetime(df["Date"])
+
+            try:
+                if df.empty:
+                    st.error("Historical data is required for recursive forecasting.")
+                    return
+
+                history_df = (
+                    df[
+                        (df["region"] == region) &
+                        (df["district"] == district)
+                    ][["Date", "food_price_index"]]
+                    .dropna()
+                    .sort_values("Date")
+                    .copy()
+                )
+
+
+                last_hist_date = history_df["Date"].max()
+                target_date = pd.to_datetime(f"{year}-{month:02d}-01")
+
+                if target_date <= last_hist_date:
+                    st.error("Selected date must be after the last historical observation.")
+                    return
+
+                start_date = last_hist_date + pd.DateOffset(months=1)
+
+                exogenous_inputs = {
+                    "region": region,
+                    "district": district,
                     "market_price_maize": market_price_maize,
                     "market_price_rice": market_price_rice,
                     "market_price_sorghum": market_price_sorghum,
@@ -200,127 +235,75 @@ def show_predictions_page(df):
                     "food_price_critical": food_price_critical,
                     "cpi_communication": cpi_communication,
                     "cpi_housing_utilities": cpi_housing_utilities,
-                    "food_price_index_rolling_mean_3": food_price_index_rolling_mean_3,
                 }
-            ]
-        )
 
-        st.markdown("</div>", unsafe_allow_html=True)  # Close the card container
+                forecast_df = recursive_forecast_gb(
+                    history_df=history_df,
+                    exogenous_inputs=exogenous_inputs,
+                    start_date=start_date,
+                    target_date=target_date
+                )
 
-        # Show prediction on button click
-        predict_button = st.button("Predict", use_container_width=True)
+                forecast_df["region"] = region
+                forecast_df["district"] = district
 
-        def inverse_boxcox(y, lambda_val):
-            if lambda_val == 0:
-                return np.exp(y)
-            return np.power(lambda_val * y + 1, 1 / lambda_val)
+                final_prediction = forecast_df.iloc[-1]["food_price_index"]
 
-        if predict_button:
-            X = pd.DataFrame(columns=scaler.feature_names_in_)
-            X.loc[0] = np.nan  # initialize all features
-
-            # 2. Fill values coming from UI
-            for col in input_data.columns:
-                if col in X.columns:
-                    X.loc[0, col] = input_data.loc[0, col]
-
-            # 3. Fill remaining features (climate, conflict, etc.) from historical medians
-            for col in X.columns:
-                if pd.isna(X.loc[0, col]):
-                    if col in df.columns and df[col].notna().any():
-                        X.loc[0, col] = df[col].median()
-                    else:
-                        raise ValueError(f"Missing required feature: {col}")
-
-
-            # 4. Scale all features
-            X_scaled = scaler.transform(X)
-
-            # 5. Select the features used by the model
-            X_scaled_df = pd.DataFrame(X_scaled, columns=scaler.feature_names_in_)
-            X_selected = X_scaled_df[feature_names]
-
-            # 6. Predict
-            raw_prediction = model.predict(X_selected)[0]
-            prediction = inverse_boxcox(raw_prediction, lambda_boxcox)
-
-            st.markdown(
-                f"""
-            <div style="background-color: #e8f5e9; padding: 2px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin: 5px 0; text-align: center; border-left: 4px solid #4CAF50;">
-                <span style="font-size: 24px;"> </span>
-                <h2 style="margin: 10px 0; color: #2c3e50;">Predicted Food Price Index</h2>
-                <p style="font-size: 32px; font-weight: bold; color: #4CAF50; margin: 10px 0;">{prediction:.2f} </p>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-            # Show visualization of recent history and prediction
-            if not df.empty:
                 st.markdown(
-                    """
-                <div style="background-color: white; padding: 2px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: 5px;">
-                    <h3 style="color: #2c3e50; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">Historical Data and Prediction</h3>
-                """,
+                    f"""
+                    <div style="background-color: #e8f5e9; padding: 20px; border-radius: 10px;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center;">
+                        <h2>Predicted Food Price Index</h2>
+                        <p style="font-size: 32px; font-weight: bold; color: #2e7d32;">
+                            {final_prediction:.2f}
+                        </p>
+                    </div>
+                    """,
                     unsafe_allow_html=True,
                 )
 
-                # Create a combined visualization
-                recent_df = df.tail(12).copy()
-
-                # Create a prediction point
-                prediction_date = pd.to_datetime(f"{year}-{month:02d}-01")
-                prediction_df = pd.DataFrame(
-                    {
-                        "Date": [prediction_date],
-                        "food_price_index": [prediction],
-                        "type": ["Prediction"],
-                    }
-                )
-
-                # Add type column to historical data
-                recent_df["type"] = "Historical"
-
-                # Combine data for visualization
                 plot_df = pd.concat(
-                    [recent_df[["Date", "food_price_index", "type"]], prediction_df]
+                    [
+                        history_df.tail(12).assign(type="Historical"),
+                        forecast_df,
+                    ],
+                    ignore_index=True,
                 )
 
-                # Create plot
                 fig = px.line(
                     plot_df,
                     x="Date",
                     y="food_price_index",
                     color="type",
                     markers=True,
-                    title="Historical Food Price Index and Prediction",
+                    title="Historical Food Price Index and Recursive Forecast",
                     labels={"food_price_index": "Food Price Index", "Date": "Date"},
                 )
 
-                # Customize the plot
                 fig.update_layout(
                     xaxis_title="Date",
                     yaxis_title="Food Price Index",
-                    legend_title="Data Type",
-                    plot_bgcolor="rgba(255,255,255,0.9)",
+                    legend_title="Series",
+                    plot_bgcolor="rgba(255,255,255,0.95)",
                     paper_bgcolor="rgba(255,255,255,0)",
                     font=dict(color="#2c3e50"),
-                    title_font=dict(size=20, color="#2c3e50"),
+                    title_font=dict(size=20),
                     xaxis=dict(showgrid=True, gridcolor="#eee"),
                     yaxis=dict(showgrid=True, gridcolor="#eee"),
                 )
 
-                # Color customization
-                fig.update_traces(line=dict(width=3), selector=dict(name="Historical"))
                 fig.update_traces(
-                    line=dict(width=4, dash="dot"),
-                    marker=dict(size=12, symbol="diamond"),
-                    selector=dict(name="Prediction"),
+                    line=dict(width=3),
+                    selector=dict(name="Historical"),
                 )
 
-                # Make plotly chart use the full width
+                fig.update_traces(
+                    line=dict(width=3, dash="dot"),
+                    marker=dict(size=9, symbol="diamond"),
+                    selector=dict(name="Predicted"),
+                )
+
                 st.plotly_chart(fig, use_container_width=True)
 
-                st.markdown(
-                    "</div>", unsafe_allow_html=True
-                )  # Close the card container
+            except Exception as e:
+                st.error(f"Prediction failed: {e}")
