@@ -1,5 +1,17 @@
 import streamlit as st
 from map import render_map
+import base64
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = BASE_DIR / "assets"
+
+
+def get_image_base64(image_path):
+    print(f"Loading image from: {image_path}")
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
 
 
 def show_home_page(df):
@@ -9,7 +21,6 @@ def show_home_page(df):
     Parameters:
     df (pandas.DataFrame): The dataset to visualize
     """
-    # Apply custom CSS for map rendering and layout fixes
     st.markdown(
         """
     <style>
@@ -39,7 +50,6 @@ def show_home_page(df):
         unsafe_allow_html=True,
     )
 
-    # Apply custom header with gradient background
     st.markdown(
         """
     <div style="background: linear-gradient(to right, #4b6cb7, #182848); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
@@ -49,22 +59,26 @@ def show_home_page(df):
         unsafe_allow_html=True,
     )
 
-    # Display metrics summary
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        display_metric("Comodities", 4, "📦")
+        display_metric("Comodities", 4, ASSETS_DIR / "commodities.png")
     with col2:
-        display_metric("Regions Covered", df["adm1_name"].nunique(), "🗺️")
+        display_metric(
+            "Regions Covered", df["adm1_name"].nunique(), ASSETS_DIR / "regions.png"
+        )
 
     with col3:
-        display_metric("Markets Monitored", df["mkt_name"].nunique(), "🏪")
+        display_metric(
+            "Markets Monitored", df["mkt_name"].nunique(), ASSETS_DIR / "markets.png"
+        )
 
     with col4:
         display_metric(
-            "Avg Food Price Index", f"{df['food_price_index'].mean():.2f}", "📈"
+            "Avg Food Price Index",
+            f"{df['food_price_index'].mean():.2f}",
+            ASSETS_DIR / "gauge.png",
         )
 
-    # Create card-like container for the description
     st.markdown(
         """
     <div style="background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px;">
@@ -79,13 +93,10 @@ def show_home_page(df):
         unsafe_allow_html=True,
     )
 
-    # Geographic Distribution section with the map
     st.markdown("<h2>Geographic Distribution</h2>", unsafe_allow_html=True)
 
-    # Render the map - moving CSS above ensures this displays correctly
     render_map(df)
 
-    # Add footer with info
     st.markdown(
         """
     <div style="margin-top: 30px; text-align: center; color: #666; font-size: 14px;">
@@ -96,17 +107,36 @@ def show_home_page(df):
     )
 
 
-def display_metric(label, value, icon):
+def display_metric(label, value, icon_path):
     """
-    Display a metric in a visually appealing card
+    Display a metric card with a local icon (Base64 embedded)
     """
+    icon_base64 = get_image_base64(icon_path)
+
     st.markdown(
         f"""
-    <div style="background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; height: 150px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 20px;">
-        <div style="font-size: 40px; margin-bottom: 10px;">{icon}</div>
-        <div style="font-size: 28px; font-weight: bold; color: #4CAF50;">{value}</div>
-        <div style="font-size: 16px; color: #666;">{label}</div>
-    </div>
-    """,
+        <div style="
+            background-color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            margin-bottom: 20px;
+        ">
+            <div style="margin-bottom: 10px;">
+                <img src="data:image/png;base64,{icon_base64}" width="40" />
+            </div>
+            <div style="font-size: 28px; font-weight: bold; color: #4CAF50;">
+                {value}
+            </div>
+            <div style="font-size: 16px; color: #666;">
+                {label}
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
