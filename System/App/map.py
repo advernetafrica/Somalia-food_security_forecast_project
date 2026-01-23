@@ -1,5 +1,5 @@
 import os
-from System.App.inference import BASE_DIR
+from inference import BASE_DIR
 import streamlit as st
 import folium
 import json

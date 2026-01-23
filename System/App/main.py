@@ -4,7 +4,7 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 
 # Import page modules
-from System.App.inference import BASE_DIR
+from inference import BASE_DIR
 from home import show_home_page
 from visualizations import show_visualizations_page
 from predictions import show_predictions_page
