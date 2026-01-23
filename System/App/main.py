@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from streamlit_option_menu import option_menu
 import pandas as pd
@@ -75,12 +76,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "..", "..", "Data")
 
 # Load Data
 @st.cache_data
 def load_data():
     # Read the local CSV file
-    df = pd.read_csv("../Data/processed_dataset.csv")
+    df = pd.read_csv(DATA_DIR + "/processed_dataset.csv")
 
     # Drop 'Unnamed: 0' column if it exists
     if "Unnamed: 0" in df.columns:
