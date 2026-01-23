@@ -7,7 +7,7 @@ from scipy.special import inv_boxcox
 from tensorflow.keras.models import load_model
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, "..", "Models")
+MODEL_DIR = os.path.join(BASE_DIR, "..", "..", "Models")
 
 LSTM_BASE_PATH = os.path.join(MODEL_DIR, "lstm_model.h5")
 GRU_RESIDUAL_PATH = os.path.join(MODEL_DIR, "gru_model.h5")
