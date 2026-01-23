@@ -64,12 +64,12 @@ def show_home_page(df):
         display_metric("Comodities", 4, ASSETS_DIR / "commodities.png")
     with col2:
         display_metric(
-            "Regions Covered", df["adm1_name"].nunique(), ASSETS_DIR / "regions.png"
+            "Regions Covered", df["region"].nunique(), ASSETS_DIR / "regions.png"
         )
 
     with col3:
         display_metric(
-            "Markets Monitored", df["mkt_name"].nunique(), ASSETS_DIR / "markets.png"
+            "Districts Monitored", df["district"].nunique(), ASSETS_DIR / "markets.png"
         )
 
     with col4:
