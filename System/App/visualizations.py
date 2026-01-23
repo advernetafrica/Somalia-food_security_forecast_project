@@ -13,7 +13,7 @@ def show_visualizations_page(df):
     st.markdown(
         """
     <div style="background: linear-gradient(to right, #00b09b, #96c93d); padding: 2px; border-radius: 10px; margin-bottom: 5px;">
-        <h1 style="color: white; text-align: center;"> Somalia Food Security Visualizer</h1>
+        <h1 style="color: white; text-align: center;"> Food Price Index Visualizer</h1>
     </div>
     """,
         unsafe_allow_html=True,
@@ -42,33 +42,25 @@ def show_visualizations_page(df):
         )
 
         # Tab Filters for Region, District, Market
-        tab1, tab2, tab3 = st.tabs(["Region", "District", "Market"])
+        tab1, tab2 = st.tabs(["Region", "District"])
 
         with tab1:
-            region_options = ["All Regions"] + list(df["adm1_name"].unique())
+            region_options = ["All Regions"] + list(df["region"].unique())
             selected_region = st.selectbox("Select Region", region_options)
 
         # Filter by region only if a specific region is selected
         if selected_region != "All Regions":
-            filtered_df = df[df["adm1_name"] == selected_region]
+            filtered_df = df[df["region"] == selected_region]
         else:
             filtered_df = df.copy()  # Use all regions
 
         # --- District selection ---
         with tab2:
-            district_options = ["All Districts"] + list(filtered_df["adm2_name"].unique())
+            district_options = ["All Districts"] + list(filtered_df["district"].unique())
             selected_district = st.selectbox("Select District", district_options)
 
         if selected_district != "All Districts":
-            filtered_df = filtered_df[filtered_df["adm2_name"] == selected_district]
-
-        # --- Market selection ---
-        with tab3:
-            market_options = ["All Markets"] + list(filtered_df["mkt_name"].unique())
-            selected_market = st.selectbox("Select Market", market_options)
-
-        if selected_market != "All Markets":
-            filtered_df = filtered_df[filtered_df["mkt_name"] == selected_market]
+            filtered_df = filtered_df[filtered_df["district"] == selected_district]
 
         st.markdown("</div>", unsafe_allow_html=True)  # Close the card container
 

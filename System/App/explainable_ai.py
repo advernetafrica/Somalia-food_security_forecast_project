@@ -8,6 +8,9 @@ import shap
 import matplotlib.pyplot as plt
 import pickle
 import os
+from inference import BASE_DIR
+
+MODEL_DIR = os.path.join(BASE_DIR, "..", "..", "Models")
 
 def inverse_boxcox(y, lambda_val):
     if lambda_val == 0:
@@ -42,34 +45,24 @@ def show_explainable_ai_page(df):
         try:
             # Load model and preprocessing objects
             # Using relative paths as in the original script
-            model_path = "../Models/best_gb_model.pkl"
-            feature_names_path = "../Models/feature_names.pkl"
-            scaler_path = "../Models/scaler.pkl"
-            lambda_boxcox_path = "../Models/lambda_boxcox.pkl"
-
-            if not os.path.exists(model_path):
-                # Try local path if relative path fails
-                model_path = "Models/best_gb_model.pkl"
-                feature_names_path = "Models/feature_names.pkl"
-                scaler_path = "Models/scaler.pkl"
-                lambda_boxcox_path = "Models/lambda_boxcox.pkl"
+            model_path = os.path.join(MODEL_DIR, "best_gb_model.pkl")
+            feature_names_path = os.path.join(MODEL_DIR, "feature_names.pkl")
+            scaler_path = os.path.join(MODEL_DIR, "scaler.pkl")
+            lambda_boxcox_path = os.path.join(MODEL_DIR, "lambda_boxcox.pkl")
 
             model = joblib.load(model_path)
             feature_names = joblib.load(feature_names_path)
             scaler = joblib.load(scaler_path)
             lambda_boxcox = joblib.load(lambda_boxcox_path)
 
-            tab1, tab2, tab3 = st.tabs(
-                ["Historical Trends", "SHAP Analysis", "What-If Analysis"]
+            tab1, tab2 = st.tabs(
+                ["SHAP Analysis", "What-If Analysis"]
             )
 
             with tab1:
-                show_historical_trends(df)
-
-            with tab2:
                 show_shap_analysis(model, scaler, feature_names, lambda_boxcox, df)
 
-            with tab3:
+            with tab2:
                 show_what_if_analysis(model, scaler, feature_names, lambda_boxcox, df)
 
         except Exception as e:
@@ -252,7 +245,7 @@ def show_what_if_analysis(model, scaler, feature_names, lambda_boxcox, df):
 
         st.markdown(
             f"""
-        <div style="background-color: #e8f5e9; padding: 15px; border-radius: 10px; margin: 10px 0; text-align: center; border-left: 4px solid #4CAF50;">
+        <div style="background-color: #e8f5e9; padding: 5px; border-radius: 10px; margin: 5px 0; text-align: center; border-left: 4px solid #4CAF50;">
             <h2 style="margin: 0; color: #2c3e50;">Predicted Food Price Index</h2>
             <p style="font-size: 36px; font-weight: bold; color: #4CAF50; margin: 10px 0;">{prediction:.4f}</p>
         </div>

@@ -9,7 +9,7 @@ def show_predictions_page(df):
     st.markdown(
         """
     <div style="background: linear-gradient(to right, #00b09b, #96c93d); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-        <h1 style="color: white; text-align: center;"> Somalia Food Security Predictor</h1>
+        <h1 style="color: white; text-align: center;"> Food Security Predictor</h1>
     </div>
     """,
         unsafe_allow_html=True,
@@ -19,7 +19,7 @@ def show_predictions_page(df):
     st.markdown(
         """
     <div style="background-color: white; padding: 2px; border-radius: 5px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 10px;">
-        <h3 style="color: #2c3e50; text-align: center;">Enter Details Below to Predict Food Security Indicators</h3>
+        <h3 style="color: #2c3e50; text-align: center;">Enter Details Below to Predict Food Price Index</h3>
     </div>
     """,
         unsafe_allow_html=True,
@@ -27,25 +27,12 @@ def show_predictions_page(df):
 
     col1, content_col, col2 = st.columns([0.05, 0.9, 0.05])
 
-    with content_col:
-        df.rename(columns={'adm1_name': 'region', 'mkt_name': 'district'}, inplace=True)
-        
-        reg_col1, reg_col2 = st.columns(2)
-        with reg_col1:
-            region = st.selectbox("Region", df["region"].unique())
-        with reg_col2:
-            district = st.selectbox("District", df[df["region"] == region]["district"].unique())
-
-        time_col1, time_col2 = st.columns(2)
-        with time_col1:
-            month = st.number_input("Month", min_value=1, max_value=12, value=4)
-        with time_col2:
-            year = st.number_input("Year", min_value=2011, max_value=2030, value=2025)
-
-        st.subheader("Exogenous Features")
+    with content_col:        
         exo_col1, exo_col2 = st.columns(2)
         
         with exo_col1:
+            region = st.selectbox("Region", df["region"].unique())
+            month = st.number_input("Month", min_value=1, max_value=12, value=4)
             market_price_maize = st.number_input("Market Price Maize", value=float(df["market_price_maize"].median()))
             market_price_rice = st.number_input("Market Price Rice", value=float(df["market_price_rice"].median()))
             market_price_sorghum = st.number_input("Market Price Sorghum", value=float(df["market_price_sorghum"].median()))
@@ -53,6 +40,8 @@ def show_predictions_page(df):
             population = st.number_input("Population", value=float(df["population"].median()))
         
         with exo_col2:
+            district = st.selectbox("District", df[df["region"] == region]["district"].unique())
+            year = st.number_input("Year", min_value=2011, max_value=2030, value=2025)
             exchange_rate_typical = st.number_input("Exchange Rate Typical", value=float(df["exchange_rate_typical"].median()))
             food_price_critical = st.number_input("Food Price Critical", value=float(df["food_price_critical"].median()))
             cpi_communication = st.number_input("CPI Communication", value=float(df["cpi_communication"].median()))
@@ -92,9 +81,9 @@ def show_predictions_page(df):
 
                 st.markdown(
                     f"""
-                    <div style="background-color: #e8f5e9; padding: 20px; border-radius: 10px;
+                    <div style="background-color: #e8f5e9; padding: 10px; border-radius: 10px;
                                 box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center;">
-                        <h2>Predicted Food Price Index</h2>
+                        <h2>Prediction</h2>
                         <p style="font-size: 32px; font-weight: bold; color: #2e7d32;">
                             {final_prediction:.2f}
                         </p>
@@ -117,7 +106,7 @@ def show_predictions_page(df):
                     y="food_price_index",
                     color="type",
                     markers=True,
-                    title="Historical Food Price Index and Recursive Forecast",
+                    title="Food Price Index Forecast",
                     labels={"food_price_index": "Food Price Index", "Date": "Date"},
                 )
 

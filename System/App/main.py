@@ -86,6 +86,7 @@ def load_data():
 
 # Load the data once for all pages
 df = load_data()
+df.rename(columns={'adm1_name': 'region', 'mkt_name': 'district'}, inplace=True)
 
 # Sidebar Navigation with custom styling
 with st.sidebar:
