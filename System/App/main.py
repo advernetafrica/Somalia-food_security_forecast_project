@@ -10,10 +10,16 @@ from visualizations import show_visualizations_page
 from predictions import show_predictions_page
 from explainable_ai import show_explainable_ai_page
 
+import streamlit as st
 
-# Set page configuration to wide mode
 st.set_page_config(
-    layout="wide", page_title="Somalia Food Security Dashboard", page_icon="🌾"
+    page_title="Food Price Index",
+    layout="wide",
+    menu_items={
+        "Get help": None,
+        "Report a bug": None,
+        "About": None
+    }
 )
 
 
