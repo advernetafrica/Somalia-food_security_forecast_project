@@ -1,3 +1,5 @@
+import os
+from System.App.inference import BASE_DIR
 import streamlit as st
 import folium
 import json
@@ -5,6 +7,7 @@ import branca.colormap as cm
 import pandas as pd
 import streamlit.components.v1 as components
 
+DATA_DIR = os.path.join(BASE_DIR, "..", "Data")
 
 def render_map(df):
     """
@@ -49,7 +52,7 @@ def render_map(df):
     with col1:
         try:
             # Load GeoJSON file
-            with open("Data/somalia.geojson", "r", encoding="utf-8") as f:
+            with open(DATA_DIR + "/somalia.geojson", "r", encoding="utf-8") as f:
                 somalia_geo = json.load(f)
 
             # Aggregate data by district
