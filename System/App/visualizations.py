@@ -215,7 +215,8 @@ def show_visualizations_page(df):
             if "Unnamed: 0" in display_df.columns:
                 display_df = display_df.drop("Unnamed: 0", axis=1)
             display_df = display_df.reset_index(drop=True)
-            st.dataframe(display_df.sort_values("period"), use_container_width=True)
+            display_df.drop("adm2_name", axis=1, inplace=True, errors='ignore')
+            st.dataframe(display_df, use_container_width=True)
 
         st.markdown("</div>", unsafe_allow_html=True)  # Close the card container
 
