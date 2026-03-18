@@ -64,6 +64,7 @@ rich==14.2.0
 rpds-py==0.24.0
 scikit-learn==1.7.2
 scipy==1.17.0
+seaborn==0.13.2
 shap==0.50.0
 six==1.17.0
 slicer==0.0.8
@@ -72,6 +73,7 @@ soupsieve==2.8.1
 streamlit==1.44.0
 streamlit-folium==0.15.1
 streamlit-option-menu==0.4.0
+tabulate==0.10.0
 tenacity==9.0.0
 tensorboard==2.20.0
 tensorboard-data-server==0.7.2
