@@ -1,130 +1,127 @@
-import os
-from inference import BASE_DIR
-import streamlit as st
-import folium
 import json
+import os
+
 import branca.colormap as cm
+import folium
 import pandas as pd
+import streamlit as st
 import streamlit.components.v1 as components
+
+from inference import BASE_DIR
 
 DATA_DIR = os.path.join(BASE_DIR, "..", "Data")
 
+COMMODITY_OPTIONS = {
+    "Food Price Index": "food_price_index",
+    "Maize Price": "market_price_maize",
+    "Rice Price": "market_price_rice",
+    "Sorghum Price": "market_price_sorghum",
+    "Cooking Oil Price": "market_price_oil",
+}
+
+# Risk palette — green (safe) → red (critical). Used for every
+# choropleth/heatmap layer that encodes a food-security stress signal.
+RISK_PALETTE = ["#0ea5e9", "#10b981", "#facc15", "#f97316", "#ef4444"]
+
+# Hard thresholds aligned with the interpretation bands on the Home page.
+FPI_BAND_INDEX = [0.0, 0.90, 1.20, 1.60, 2.00, 3.50]
+
+
 def render_map(df):
-    """
-    Renders a choropleth map of Kenya counties with health commodity distribution data
-    """
+    """Choropleth of Somalia districts coloured by the selected commodity."""
 
-    # Create a layout with map on the left and checkboxes on the right
-    col1, col2 = st.columns([0.8, 0.2])
+    map_col, ctrl_col = st.columns([0.78, 0.22], gap="large")
 
-    # Mapping of user-friendly names to feature names
-    commodity_options = {
-        "Food Price Index": "food_price_index",
-        "Sorghum Price": "market_price_sorghum",
-        "Cooking Oil Price": "market_price_oil",
-        "Rice Price": "market_price_rice",
-        "Maize Price": "market_price_maize",
-    }
-
-    # In the right column, create radio buttons for commodities
-    with col2:
-        st.write("**Select Commodity:**")
-
-        # Show user-friendly names in the radio
-        selected_label = st.radio(
-            "Choose:",
-            options=list(commodity_options.keys()),
-            index=0,
-            key="commodity_radio",
+    with ctrl_col:
+        st.markdown(
+            "<div class='eyebrow' style='margin-bottom:8px;'>Layer</div>",
+            unsafe_allow_html=True,
         )
+        selected_label = st.radio(
+            "Indicator",
+            options=list(COMMODITY_OPTIONS.keys()),
+            index=0,
+            label_visibility="collapsed",
+            key="map_commodity_radio",
+        )
+        selected_commodity = COMMODITY_OPTIONS[selected_label]
 
-        # Map back to the actual feature name for slicing
-        selected_commodity = commodity_options[selected_label]
-
-        # Get list of selected commodities (single)
-        commodities_to_show = [selected_commodity]
-
-
-    # No filter on df
-    filtered_df = df
-
-    # In the left column, render the map
-    with col1:
+    with map_col:
         try:
-            # Load GeoJSON file
-            with open(DATA_DIR + "/somalia.geojson", "r", encoding="utf-8") as f:
+            with open(os.path.join(DATA_DIR, "somalia.geojson"), "r", encoding="utf-8") as f:
                 somalia_geo = json.load(f)
 
-            # Aggregate data by district
-            if commodities_to_show:
-                data = (
-                    filtered_df.groupby("adm2_name")[commodities_to_show]
-                    .mean()
-                    .mean(axis=1)
-                    .reset_index()
-                    .rename(columns={0: "avg_price"})
-                )
-            else:
-                data = pd.DataFrame({"adm2_name": [], "avg_price": []})
+            data = (
+                df.groupby("adm2_name")[[selected_commodity]]
+                .mean()
+                .mean(axis=1)
+                .reset_index()
+                .rename(columns={0: "avg_value"})
+            )
             data["region"] = data["adm2_name"].str.upper()
+            value_dict = dict(zip(data["region"], data["avg_value"]))
 
-            value_dict = dict(zip(data["region"], data["avg_price"]))
-
-            # Add the value data to each feature in the GeoJSON
             for feature in somalia_geo["features"]:
-                region_name = feature["properties"].get("adm2_name", "")
-                if region_name is None:
-                    region_name = ""
-                region_name = region_name.upper()
+                region_name = (feature["properties"].get("adm2_name") or "").upper()
                 value = value_dict.get(region_name, 0)
-
-                # Add value to feature properties for tooltip
                 feature["properties"]["FOOD_PRICE_INDEX"] = value
-                # Format the value
                 feature["properties"]["FORMATTED_INDEX"] = f"{value:.2f}"
 
-            min_value = data["avg_price"].min() if not data.empty else 0
-            max_value = data["avg_price"].max() if not data.empty else 1
+            min_value = data["avg_value"].min() if not data.empty else 0
+            max_value = data["avg_value"].max() if not data.empty else 1
 
-            # Create the base map with explicit tile provider
             m = folium.Map(
-                location=[5.1521, 46.1996], zoom_start=6, tiles="CartoDB positron"
+                location=[5.1521, 46.1996],
+                zoom_start=6,
+                tiles="CartoDB positron",
+                control_scale=True,
             )
 
-            # Create color scale
-            colors = ["#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"]
-            color_scale = cm.LinearColormap(colors, vmin=min_value, vmax=max_value)
+            if selected_commodity == "food_price_index":
+                # Hard-banded risk scale that matches the Home-page legend.
+                color_scale = cm.StepColormap(
+                    RISK_PALETTE,
+                    index=FPI_BAND_INDEX,
+                    vmin=FPI_BAND_INDEX[0],
+                    vmax=FPI_BAND_INDEX[-1],
+                )
+            else:
+                # Commodity prices — higher = worse affordability → same risk gradient.
+                color_scale = cm.LinearColormap(
+                    RISK_PALETTE, vmin=min_value, vmax=max_value
+                )
+            color_scale.caption = f"{selected_label} · district average"
 
-            # Style functions
             def style_function(feature):
-                region_name = feature["properties"].get("adm2_name", "")
-                if region_name is None:
-                    region_name = ""
-                region_name = region_name.upper()
+                region_name = (feature["properties"].get("adm2_name") or "").upper()
                 value = value_dict.get(region_name, 0)
                 return {
                     "fillColor": color_scale(value),
-                    "color": "black",
-                    "weight": 1,
-                    "fillOpacity": 0.7,
+                    "color": "#475569",
+                    "weight": 0.8,
+                    "fillOpacity": 0.82,
                 }
 
-            def highlight_function(feature):
+            def highlight_function(_feature):
                 return {
-                    "weight": 3,
-                    "color": "#666",
-                    "dashArray": "",
-                    "fillOpacity": 0.9,
+                    "weight": 2.5,
+                    "color": "#0f172a",
+                    "fillOpacity": 0.95,
                 }
 
-            # Add GeoJSON layer with enhanced tooltip
             tooltip = folium.GeoJsonTooltip(
                 fields=["adm2_name", "FORMATTED_INDEX"],
-                aliases=["District:", "Avg Selected Commodity Price:"],
+                aliases=["District", f"{selected_label}"],
                 localize=True,
                 sticky=True,
                 style=(
-                    "background-color: white; color: #333333; font-family: arial; font-size: 12px; padding: 10px;"
+                    "background-color: #0f172a;"
+                    "color: #f8fafc;"
+                    "font-family: Inter, sans-serif;"
+                    "font-size: 12px;"
+                    "padding: 8px 12px;"
+                    "border-radius: 8px;"
+                    "border: none;"
                 ),
             )
 
@@ -133,31 +130,32 @@ def render_map(df):
                 style_function=style_function,
                 highlight_function=highlight_function,
                 tooltip=tooltip,
-                name="Somalia Regions",
+                name="Somalia Districts",
             ).add_to(m)
 
-            # Add color scale
-            color_scale.caption = "Average Food Price Index"
             m.add_child(color_scale)
 
-            # Get the average index for display
-            avg_index = data["avg_price"].mean() if not data.empty else 0
-
-            # Display average index
+            avg_index = data["avg_value"].mean() if not data.empty else 0
             st.markdown(
-                f"**Average Across All Districts: {avg_index:.2f}**"
+                f"""
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                            padding:10px 14px;background:#f8fafc;
+                            border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;">
+                    <span style="color:#64748b;font-size:0.85rem;font-weight:600;
+                                 letter-spacing:0.05em;text-transform:uppercase;">
+                      National mean · {selected_label}
+                    </span>
+                    <span style="color:#0f172a;font-weight:700;font-size:1.1rem;">
+                      {avg_index:.2f}
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-            # Get the HTML representation of the map
-            map_html = m._repr_html_()
-
-            # Display the map using components.html instead of st_folium
-            components.html(map_html, height=600)
+            components.html(m._repr_html_(), height=580)
 
         except FileNotFoundError:
-            st.error(
-                "❌ Error: Somalia GeoJSON file not found. Please make sure 'somalia.geojson' is in the Data directory."
-            )
+            st.error("Somalia GeoJSON file not found in the Data directory.")
         except Exception as e:
-            st.error(f"❌ Error rendering map: {str(e)}")
-            st.info("Try refreshing the page or check console for more details.")
+            st.error(f"Error rendering map: {e}")
