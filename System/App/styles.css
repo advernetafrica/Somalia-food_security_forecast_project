@@ -27,12 +27,11 @@
     --text-muted: #64748b;
     --text-inverse: #f8fafc;
 
-    /* Sidebar — light, matches the option_menu white card */
-    --sidebar-bg: #ffffff;
-    --sidebar-bg-2: #f8fafc;
-    --sidebar-text: #0f172a;
-    --sidebar-muted: #64748b;
-    --sidebar-border: #e2e8f0;
+    /* Sidebar — dark navy brand panel */
+    --sidebar-bg: #0b1220;
+    --sidebar-bg-2: #111a2e;
+    --sidebar-text: #e2e8f0;
+    --sidebar-muted: #94a3b8;
 
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
@@ -101,10 +100,16 @@ a:hover { color: var(--brand-500); }
    Sidebar
    ------------------------------------------------------------------------- */
 [data-testid="stSidebar"] {
-    background: var(--sidebar-bg) !important;
-    border-right: 1px solid var(--sidebar-border);
+    background: linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-2) 100%) !important;
+    border-right: 1px solid rgba(148, 163, 184, 0.08);
     min-width: 230px !important;
     width: 230px !important;
+}
+
+/* Lock color scheme so the browser's system dark-mode heuristic can't
+   repaint form controls / scrollbars on the deployed site. */
+html, body, .stApp, [data-testid="stSidebar"] {
+    color-scheme: light !important;
 }
 
 [data-testid="stSidebar"] * { color: var(--sidebar-text) !important; }
