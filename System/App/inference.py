@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "..", "..", "processed_dataset.csv")
+DATA_PATH = os.path.join(BASE_DIR, "..", "..", "Data", "processed_dataset.csv")
 
 SELECTED_FEATURES = [
     "region",
