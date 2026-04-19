@@ -116,17 +116,26 @@ html, body, .stApp, [data-testid="stSidebar"] {
 
 [data-testid="stSidebarUserContent"] { padding-top: 1rem !important; }
 
-/* streamlit-option-menu ships a near-white default container bg that
-   hides our light nav-link labels on the dark sidebar. Force every
-   internal wrapper transparent so the sidebar gradient shows through. */
+/* streamlit-option-menu is rendered as a custom component; on some
+   streamlit+python combos its iframe/component wrapper inherits the
+   theme's secondaryBackgroundColor (white) and appears as a white
+   card on the dark sidebar. Null every plausible wrapper so only the
+   sidebar gradient shows through. */
 [data-testid="stSidebar"] nav,
 [data-testid="stSidebar"] ul,
 [data-testid="stSidebar"] ul.nav,
 [data-testid="stSidebar"] .nav,
-[data-testid="stSidebar"] .css-nav-container,
-[data-testid="stSidebar"] [class*="nav-"] > ul {
+[data-testid="stSidebar"] iframe,
+[data-testid="stSidebar"] [data-testid="stElementContainer"],
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"],
+[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],
+[data-testid="stSidebar"] [data-testid="stCustomComponentV1"],
+[data-testid="stSidebar"] [class*="stCustomComponent"] {
     background: transparent !important;
     background-color: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
 }
 
 .nav-link {
