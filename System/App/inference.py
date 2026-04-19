@@ -5,15 +5,11 @@
 import os
 import hashlib
 
-import joblib
 import numpy as np
 import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, "..", "..", "Models")
-
-REGION_ENCODER_PATH = os.path.join(MODEL_DIR, "region_encoder.pkl")
-DISTRICT_ENCODER_PATH = os.path.join(MODEL_DIR, "district_encoder.pkl")
+DATA_PATH = os.path.join(BASE_DIR, "..", "..", "processed_dataset.csv")
 
 SELECTED_FEATURES = [
     "region",
@@ -30,9 +26,22 @@ SELECTED_FEATURES = [
     "food_price_index_rolling_mean_3",
 ]
 
-# Only lightweight encoders are loaded — used for dropdowns / class lists.
-region_le = joblib.load(REGION_ENCODER_PATH)
-district_le = joblib.load(DISTRICT_ENCODER_PATH)
+
+class _ClassList:
+    """Minimal shim exposing `.classes_` like sklearn's LabelEncoder."""
+
+    def __init__(self, classes):
+        self.classes_ = np.array(classes)
+
+
+def _load_classes():
+    df = pd.read_csv(DATA_PATH, usecols=["region", "district"])
+    regions = sorted(df["region"].dropna().unique().tolist())
+    districts = sorted(df["district"].dropna().unique().tolist())
+    return _ClassList(regions), _ClassList(districts)
+
+
+region_le, district_le = _load_classes()
 
 
 # Dataset anchors (medians) — FPI sits in ~[0.5, 3.0], so predictions
