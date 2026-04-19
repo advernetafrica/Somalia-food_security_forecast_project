@@ -1,18 +1,17 @@
-# inference_hybrid_residual.py
-import pandas as pd
-import numpy as np
-import joblib
+# inference.py — synthetic simulation mode (no TF / no Keras).
+# Used on the `simulation` branch so the app stays responsive.
+# The real hybrid LSTM+GRU inference lives on the main branch.
+
 import os
-from scipy.special import inv_boxcox
-from tensorflow.keras.models import load_model
+import hashlib
+
+import joblib
+import numpy as np
+import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "..", "..", "Models")
 
-LSTM_BASE_PATH = os.path.join(MODEL_DIR, "lstm_model.h5")
-GRU_RESIDUAL_PATH = os.path.join(MODEL_DIR, "gru_model.h5")
-SCALER_PATH = os.path.join(MODEL_DIR, "scaler.pkl")
-LAMBDA_PATH = os.path.join(MODEL_DIR, "lambda_boxcox.pkl")
 REGION_ENCODER_PATH = os.path.join(MODEL_DIR, "region_encoder.pkl")
 DISTRICT_ENCODER_PATH = os.path.join(MODEL_DIR, "district_encoder.pkl")
 
@@ -31,83 +30,116 @@ SELECTED_FEATURES = [
     "food_price_index_rolling_mean_3",
 ]
 
-# Load assets
-scaler = joblib.load(SCALER_PATH)
-lambda_boxcox = joblib.load(LAMBDA_PATH)
+# Only lightweight encoders are loaded — used for dropdowns / class lists.
 region_le = joblib.load(REGION_ENCODER_PATH)
 district_le = joblib.load(DISTRICT_ENCODER_PATH)
 
-# Load the two hybrid components
-lstm_base = load_model(LSTM_BASE_PATH, compile=False)
-gru_residual = load_model(GRU_RESIDUAL_PATH, compile=False)
+
+# Dataset anchors (medians) — FPI sits in ~[0.5, 3.0], so predictions
+# must stay on that scale. Shocks are expressed as % deviations.
+_BASKET_MEDIAN = 84_844.0          # maize + rice + sorghum + oil
+_CPI_BUNDLE_MEDIAN = 28.028        # cpi_communication + cpi_housing_utilities
+_CRITICAL_ANCHOR = 30.0            # moderate stress benchmark
+
+# Sensitivity of the FPI to each driver's relative shock.
+_SHOCK_GAIN = {
+    "price_basket": 0.18,
+    "cpi_bundle": 0.10,
+    "food_price_critical": 0.06,
+}
+
+_FPI_FLOOR = 0.4
+_FPI_CEIL = 3.5
+
+
+def _deterministic_noise(seed_str: str, scale: float = 0.025) -> float:
+    """Small reproducible jitter derived from region+district+date hash."""
+    h = hashlib.md5(seed_str.encode("utf-8")).hexdigest()
+    val = (int(h[:8], 16) / 0xFFFFFFFF) * 2.0 - 1.0  # → [-1, 1]
+    return val * scale
+
 
 def preprocess_data(df: pd.DataFrame) -> np.ndarray:
-    df = df.copy()
-    df["region"] = region_le.transform(df["region"])
-    df["district"] = district_le.transform(df["district"])
-    X = df[SELECTED_FEATURES]
-    return scaler.transform(X)
+    """Kept for API compatibility — returns feature matrix as numpy array."""
+    return df[SELECTED_FEATURES].to_numpy()
+
 
 def postprocess_prediction(y_hat: float) -> float:
-    return inv_boxcox(y_hat, lambda_boxcox)
+    return float(y_hat)
 
-def predict_hybrid_residual(input_df: pd.DataFrame) -> float:
+
+def predict_hybrid_residual(input_df: pd.DataFrame, seed: str = "") -> float:
     """
-    Predicts using the LSTM + GRU-Residual hybrid logic.
+    Synthetic predictor calibrated to the real FPI scale (~0.5–3.0).
+
+    Anchors the prediction to `food_price_index_rolling_mean_3` (i.e. the
+    recent historical FPI) and applies proportional shocks from the major
+    drivers plus a small deterministic jitter for realism.
     """
-    X_scaled = preprocess_data(input_df)
-    
-    # Reshape to (1, 1, num_features) as per your training code
-    X_hybrid = X_scaled.reshape((X_scaled.shape[0], 1, X_scaled.shape[1]))
-    
-    # Base prediction + Residual correction
-    lstm_pred = lstm_base.predict(X_hybrid, verbose=0).flatten()[0]
-    gru_corr = gru_residual.predict(X_hybrid, verbose=0).flatten()[0]
-    
-    final_y_hat = lstm_pred + gru_corr
-    return postprocess_prediction(final_y_hat)
+    row = input_df.iloc[0]
+
+    basket = (
+        row["market_price_maize"]
+        + row["market_price_rice"]
+        + row["market_price_sorghum"]
+        + row["market_price_oil"]
+    )
+    cpi_bundle = row["cpi_communication"] + row["cpi_housing_utilities"]
+
+    price_shock = (basket / _BASKET_MEDIAN) - 1.0
+    cpi_shock = (cpi_bundle / _CPI_BUNDLE_MEDIAN) - 1.0
+    critical_shock = row["food_price_critical"] / _CRITICAL_ANCHOR
+
+    base = float(row["food_price_index_rolling_mean_3"])
+    multiplier = (
+        1.0
+        + _SHOCK_GAIN["price_basket"] * price_shock
+        + _SHOCK_GAIN["cpi_bundle"] * cpi_shock
+        + _SHOCK_GAIN["food_price_critical"] * critical_shock
+    )
+
+    pred = base * multiplier
+
+    seed_str = seed or f"{row['region']}|{row['district']}"
+    pred += _deterministic_noise(seed_str, scale=0.025)
+
+    pred = max(_FPI_FLOOR, min(_FPI_CEIL, pred))
+    return postprocess_prediction(pred)
+
 
 def recursive_forecast_hybrid(
     history_df: pd.DataFrame,
     exogenous_inputs: dict,
     start_date: pd.Timestamp,
-    target_date: pd.Timestamp
+    target_date: pd.Timestamp,
 ) -> pd.DataFrame:
+    """Iteratively generate FPI forecasts, month-by-month, up to target_date."""
     df_extended = history_df.copy()
     predictions = []
-    
+
     current_date = start_date
     while current_date <= target_date:
         rolling_mean_3 = df_extended["food_price_index"].tail(3).mean()
-        
+
         model_input = pd.DataFrame([{
-            "region": exogenous_inputs["region"],
-            "district": exogenous_inputs["district"],
-            "market_price_maize": exogenous_inputs["market_price_maize"],
-            "market_price_rice": exogenous_inputs["market_price_rice"],
-            "market_price_sorghum": exogenous_inputs["market_price_sorghum"],
-            "market_price_oil": exogenous_inputs["market_price_oil"],
-            "population": exogenous_inputs["population"],
-            "exchange_rate_typical": exogenous_inputs["exchange_rate_typical"],
-            "food_price_critical": exogenous_inputs["food_price_critical"],
-            "cpi_communication": exogenous_inputs["cpi_communication"],
-            "cpi_housing_utilities": exogenous_inputs["cpi_housing_utilities"],
+            **exogenous_inputs,
             "food_price_index_rolling_mean_3": rolling_mean_3,
         }])
-        
-        y_hat = predict_hybrid_residual(model_input)
-        
+
+        seed = f"{exogenous_inputs['region']}|{exogenous_inputs['district']}|{current_date.date()}"
+        y_hat = predict_hybrid_residual(model_input, seed=seed)
+
         predictions.append({
             "Date": current_date,
             "food_price_index": y_hat,
-            "type": "Predicted"
+            "type": "Predicted",
         })
-        
+
         df_extended = pd.concat([
             df_extended,
-            pd.DataFrame({"Date": [current_date], "food_price_index": [y_hat]})
+            pd.DataFrame({"Date": [current_date], "food_price_index": [y_hat]}),
         ], ignore_index=True)
-        
+
         current_date += pd.DateOffset(months=1)
-        
+
     return pd.DataFrame(predictions)
