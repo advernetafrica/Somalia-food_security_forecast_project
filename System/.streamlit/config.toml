@@ -1,0 +1,24 @@
+# Local-dev mirror of the repo-root config, so launching with
+# `cd System && streamlit run App/main.py` picks up the brand theme.
+# Keep this in sync with ../../.streamlit/config.toml.
+
+[theme]
+base = "light"
+primaryColor = "#10b981"
+backgroundColor = "#f1f5f9"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0f172a"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+runOnSave = false
+enableCORS = false
+enableXsrfProtection = true
+
+[client]
+toolbarMode = "auto"
+showErrorDetails = true

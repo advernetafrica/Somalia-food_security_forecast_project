@@ -1,0 +1,25 @@
+# Somalia Food Security Dashboard — native Streamlit theme.
+# These tokens drive the pre-CSS render (loading spinner, focus rings,
+# tab underline, slider track, progress bar) and the browser meta
+# theme-color so the app is consistent from first paint onward.
+
+[theme]
+base = "light"
+primaryColor = "#10b981"                  # emerald accent — buttons, sliders, focus
+backgroundColor = "#f1f5f9"               # app canvas (slate-100)
+secondaryBackgroundColor = "#ffffff"      # cards, inputs, popovers
+textColor = "#0f172a"                     # primary text (slate-900)
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+runOnSave = false
+enableCORS = false
+enableXsrfProtection = true
+
+[client]
+toolbarMode = "auto"
+showErrorDetails = true
