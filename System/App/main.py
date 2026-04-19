@@ -80,10 +80,10 @@ with st.sidebar:
                             display:flex;align-items:center;justify-content:center;
                             font-size:18px;">🌾</div>
                 <div>
-                    <div style="font-weight:700;font-size:1rem;color:#f8fafc;line-height:1.1;">
+                    <div style="font-weight:700;font-size:1rem;color:#0f172a;line-height:1.1;">
                         Food Security
                     </div>
-                    <div style="color:#94a3b8;font-size:0.78rem;letter-spacing:0.04em;">
+                    <div style="color:#64748b;font-size:0.78rem;letter-spacing:0.04em;">
                         Somalia · Dashboard
                     </div>
                 </div>
@@ -105,12 +105,13 @@ with st.sidebar:
             },
             "icon": {"color": "#10b981", "font-size": "17px"},
             "nav-link": {
-                "color": "#e2e8f0",
+                "color": "#334155",
                 "font-size": "0.95rem",
                 "text-align": "left",
                 "padding": "10px 14px",
                 "margin": "2px 0",
                 "border-radius": "10px",
+                "--hover-color": "#f1f5f9",
             },
             "nav-link-selected": {
                 "background": "linear-gradient(90deg,#059669,#10b981)",
@@ -123,7 +124,7 @@ with st.sidebar:
     st.markdown(
         """
         <div style="position:absolute;bottom:24px;left:24px;right:24px;
-                    color:#94a3b8;font-size:0.75rem;">
+                    color:#64748b;font-size:0.75rem;">
             <div style="opacity:0.8;">v1.0 · Dashboard</div>
         </div>
         """,
