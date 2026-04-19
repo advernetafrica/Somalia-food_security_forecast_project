@@ -35,9 +35,10 @@ class _ClassList:
 
 
 def _load_classes():
-    df = pd.read_csv(DATA_PATH, usecols=["region", "district"])
-    regions = sorted(df["region"].dropna().unique().tolist())
-    districts = sorted(df["district"].dropna().unique().tolist())
+    # CSV uses adm1_name/mkt_name; main.py renames to region/district after read.
+    df = pd.read_csv(DATA_PATH, usecols=["adm1_name", "mkt_name"])
+    regions = sorted(df["adm1_name"].dropna().unique().tolist())
+    districts = sorted(df["mkt_name"].dropna().unique().tolist())
     return _ClassList(regions), _ClassList(districts)
 
 
